@@ -1,12 +1,12 @@
 // api/deploy.js
-const { Redis } = require("@upstash/redis");
+const { Redis } = require("@upstash/redis/nodejs");
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// helper: baca body JSON (Vercel Node function tidak auto-parse)
+// helper: baca body JSON sendiri (jangan percaya req.body)
 async function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let data = "";
@@ -34,22 +34,14 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-    if (!VERCEL_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: "VERCEL_TOKEN belum diset di Environment Variables.",
-      });
-    }
-
+    // ❗ JANGAN pakai req.body langsung
     const body = await readJsonBody(req);
-    const projectName = (body.projectName || "").trim() || "untitled-project";
-    const files = Array.isArray(body.files) ? body.files : [];
+    const { projectName, files } = body || {};
 
-    if (!files.length) {
+    if (!projectName || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({
         success: false,
-        error: "Tidak ada file yang dikirim.",
+        error: "projectName & files wajib diisi",
       });
     }
 
@@ -63,15 +55,26 @@ module.exports = async (req, res) => {
       });
     }
 
+    const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
+    if (!VERCEL_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        error: "VERCEL_TOKEN belum diset di Environment Variables.",
+      });
+    }
+
+    const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID || undefined;
+
     const filesForVercel = files.map((f) => ({
       file: f.name,
-      data: f.content, // sudah base64 dari frontend
+      data: f.content, // base64 dari frontend
       encoding: "base64",
     }));
 
-    const url = "https://api.vercel.com/v13/deployments";
+    const url = new URL("https://api.vercel.com/v13/deployments");
+    if (VERCEL_TEAM_ID) url.searchParams.set("teamId", VERCEL_TEAM_ID);
 
-    const payload = {
+    const deployPayload = {
       name: projectName,
       files: filesForVercel,
       projectSettings: {
@@ -80,26 +83,25 @@ module.exports = async (req, res) => {
       },
     };
 
-    const apiRes = await fetch(url, {
+    const apiRes = await fetch(url.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${VERCEL_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(deployPayload),
     });
 
-    const apiJsonText = await apiRes.text();
+    // ❗ Baca sebagai text dulu, baru coba parse JSON
+    const apiText = await apiRes.text();
     let apiJson;
-
     try {
-      apiJson = JSON.parse(apiJsonText);
+      apiJson = JSON.parse(apiText);
     } catch (e) {
-      // kalau Vercel balas HTML/error aneh
       return res.status(apiRes.status || 500).json({
         success: false,
         error: "Response dari Vercel bukan JSON.",
-        details: apiJsonText.slice(0, 400),
+        details: apiText.slice(0, 400),
       });
     }
 
@@ -107,7 +109,7 @@ module.exports = async (req, res) => {
       return res.status(apiRes.status).json({
         success: false,
         error:
-          (apiJson.error && apiJson.error.message) ||
+          (apiJson && apiJson.error && apiJson.error.message) ||
           apiJson.error ||
           "Failed to deploy to Vercel",
         details: apiJson,
@@ -129,9 +131,9 @@ module.exports = async (req, res) => {
         time: Date.now(),
       };
       await redis.lpush("deploy_history", JSON.stringify(historyItem));
-      await redis.ltrim("deploy_history", 0, 49); // simpan max 50
-    } catch (e) {
-      console.error("Failed to write deploy history:", e);
+      await redis.ltrim("deploy_history", 0, 49);
+    } catch (err) {
+      console.error("Failed to write deploy history:", err);
     }
 
     return res.status(200).json({
