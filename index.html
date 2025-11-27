@@ -234,7 +234,6 @@
       opacity: 0.8;
     }
 
-    /* tombol history actions */
     .history-actions {
       margin-top: 6px;
       display: flex;
@@ -549,6 +548,7 @@
 
   <!-- HAMBURGER -->
   <button class="menu-btn" id="menuBtn">☰</button>
+
   <div class="menu-panel" id="menuPanel">
     <button id="menuTutorial">📘 Tutorial Deploy</button>
     <button id="menuHistory">🕒 History Deploy</button>
@@ -637,9 +637,14 @@
         </div>
       </div>
 
+      <!-- tombol open last result -->
+      <button class="btn-ghost" id="btnOpenResult" type="button" style="margin-top:10px;">
+        Open Result (last deploy)
+      </button>
+
       <div class="docs">
         <span style="font-size:11px; opacity:0.8;">
-          Hint: buka menu ☰ di kiri atas untuk lihat tutorial & history deploy.
+          Hint: buka menu ☰ di kiri atas untuk lihat tutorial &amp; history deploy.
         </span>
       </div>
 
@@ -656,6 +661,7 @@
     const projectNameInput = document.getElementById("projectName");
     const deployBtn = document.getElementById("deployBtn");
     const btnClearLog = document.getElementById("btnClearLog");
+    const btnOpenResult = document.getElementById("btnOpenResult");
 
     const menuBtn = document.getElementById("menuBtn");
     const menuPanel = document.getElementById("menuPanel");
@@ -666,6 +672,8 @@
     const sideTitle = document.getElementById("sideTitle");
     const sideContent = document.getElementById("sideContent");
     const sideClose = document.getElementById("sideClose");
+
+    let lastDeployUrl = null;
 
     function formatTime(date) {
       return date.toTimeString().split(" ")[0];
@@ -731,16 +739,22 @@
       consoleBody.scrollTop = 0;
     });
 
+    // OPEN LAST RESULT
+    btnOpenResult.addEventListener("click", () => {
+      if (!lastDeployUrl) {
+        appendLog("Belum ada URL deploy untuk dibuka.", "error");
+        return;
+      }
+      window.open(lastDeployUrl, "_blank", "noopener,noreferrer");
+    });
+
     // HAMBURGER
     menuBtn.addEventListener("click", () => {
       menuPanel.classList.toggle("open");
     });
 
     document.addEventListener("click", (e) => {
-      if (
-        !menuPanel.contains(e.target) &&
-        e.target !== menuBtn
-      ) {
+      if (!menuPanel.contains(e.target) && e.target !== menuBtn) {
         menuPanel.classList.remove("open");
       }
     });
@@ -857,7 +871,6 @@
               alert("Gagal menyalin URL.");
             });
         } else {
-          // fallback jadul
           const dummy = document.createElement("input");
           dummy.value = url;
           document.body.appendChild(dummy);
@@ -872,6 +885,41 @@
         }
       }
     });
+
+    // helper: file -> base64
+    async function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          const base64 = String(result).split(",")[1] || "";
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // helper: panggil /api/deploy dengan parsing aman
+    async function callDeployApi(payload) {
+      const res = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        // backend balikin HTML/text
+        throw new Error("SERVER_RETURNED_NON_JSON: " + text.slice(0, 300));
+      }
+
+      return { ok: res.ok, data };
+    }
 
     // DEPLOY
     deployBtn.addEventListener("click", async () => {
@@ -896,19 +944,6 @@
         return;
       }
 
-      async function fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result;
-            const base64 = String(result).split(",")[1] || "";
-            resolve(base64);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      }
-
       try {
         deployBtn.classList.add("disabled");
         deployBtn.textContent = "DEPLOYING TO VERCEL...";
@@ -927,37 +962,36 @@
 
         appendLog("Sending payload to /api/deploy ...");
 
-        const response = await fetch("/api/deploy", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            projectName,
-            files: filesPayload,
-          }),
+        const { ok, data } = await callDeployApi({
+          projectName,
+          files: filesPayload,
         });
 
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
+        if (!ok || !data.success) {
           appendLog(
-            `Deployment failed: ${result.error || "Unknown error"}`,
+            `Deployment failed: ${data.error || "Unknown error"}`,
             "error"
           );
-          if (result.details) {
+          if (data.details) {
             appendLog(
-              `Details: ${JSON.stringify(result.details).slice(0, 400)}...`,
+              `Details: ${
+                typeof data.details === "string"
+                  ? data.details.slice(0, 400)
+                  : JSON.stringify(data.details).slice(0, 400)
+              }...`,
               "error"
             );
           }
-        } else {
-          const previewUrl = result.url || "(no URL)";
-          appendLog(
-            `✔ Deployment completed. Preview: ${previewUrl}`,
-            "success"
-          );
+          return;
         }
+
+        const previewUrl = data.url || "(no URL)";
+        lastDeployUrl = data.url || null;
+
+        appendLog(
+          `✔ Deployment completed. Preview: ${previewUrl}`,
+          "success"
+        );
       } catch (err) {
         appendLog(`Deployment crashed: ${err.message}`, "error");
       } finally {
@@ -967,4 +1001,4 @@
     });
   </script>
 </body>
-  </html>
+</html>
