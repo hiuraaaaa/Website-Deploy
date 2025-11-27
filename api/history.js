@@ -1,35 +1,42 @@
 // api/history.js
-// GET /api/history → ambil history deploy dari KV
+const { Redis } = require("@upstash/redis/nodejs");
 
-const { kv } = require("@vercel/kv");
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
-    res.statusCode = 405;
-    return res.json({ error: "Method not allowed" });
+    res.setHeader("Allow", "GET");
+    return res
+      .status(405)
+      .json({ success: false, error: "Method not allowed" });
   }
 
   try {
-    const rawItems = await kv.lrange("deploy-history", 0, 49);
-    const items = (rawItems || []).map((s) => {
-      try {
-        return JSON.parse(s);
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
+    // Ambil max 50 history terbaru (index 0–49)
+    const raw = await redis.lrange("deploy_history", 0, 49);
+    const items =
+      (raw || [])
+        .map((s) => {
+          try {
+            return JSON.parse(s);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean) || [];
 
-    res.statusCode = 200;
-    return res.json({
+    return res.status(200).json({
       success: true,
       items,
     });
   } catch (err) {
-    console.error("Error reading history from KV:", err);
-    res.statusCode = 500;
-    return res.json({
+    console.error("History API error:", err);
+    return res.status(500).json({
       success: false,
-      error: "Failed to read history",
+      error: "Failed to load history",
       details: err.message || String(err),
     });
   }
