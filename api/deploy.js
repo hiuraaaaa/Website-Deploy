@@ -1,82 +1,86 @@
 // api/deploy.js
-// Serverless Function untuk Vercel
-// Terima JSON: { projectName, files: [{ name, content(base64) }, ...] }
-// Lalu kirim ke Vercel Deployments API + simpan history ke KV
+const { Redis } = require("@upstash/redis");
 
-const { kv } = require("@vercel/kv");
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+
+// helper: baca body JSON (Vercel Node function tidak auto-parse)
+async function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+    req.on("end", () => {
+      try {
+        const json = data ? JSON.parse(data) : {};
+        resolve(json);
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on("error", reject);
+  });
+}
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
-    res.statusCode = 405;
-    return res.json({ error: "Method not allowed" });
-  }
-
-  const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
-  const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID || undefined;
-
-  if (!VERCEL_TOKEN) {
-    res.statusCode = 500;
-    return res.json({ error: "VERCEL_TOKEN is not set" });
+    res.setHeader("Allow", "POST");
+    return res
+      .status(405)
+      .json({ success: false, error: "Method not allowed" });
   }
 
   try {
-    // Baca body mentah (karena ini handler low-level)
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
-    const rawBody = Buffer.concat(chunks).toString("utf8") || "{}";
-
-    let body;
-    try {
-      body = JSON.parse(rawBody);
-    } catch (e) {
-      res.statusCode = 400;
-      return res.json({ error: "Invalid JSON body" });
+    const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
+    if (!VERCEL_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        error: "VERCEL_TOKEN belum diset di Environment Variables.",
+      });
     }
 
-    const { projectName, files } = body;
+    const body = await readJsonBody(req);
+    const projectName = (body.projectName || "").trim() || "untitled-project";
+    const files = Array.isArray(body.files) ? body.files : [];
 
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      res.statusCode = 400;
-      return res.json({ error: "No files provided" });
+    if (!files.length) {
+      return res.status(400).json({
+        success: false,
+        error: "Tidak ada file yang dikirim.",
+      });
     }
 
     const hasIndex = files.some(
       (f) => f.name && f.name.toLowerCase() === "index.html"
     );
     if (!hasIndex) {
-      res.statusCode = 400;
-      return res.json({
-        error: "index.html tidak ditemukan di file yang dikirim",
+      return res.status(400).json({
+        success: false,
+        error: "File index.html tidak ditemukan di payload.",
       });
     }
 
-    const safeProjectName =
-      (projectName || "deployer-app")
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "") || "deployer-app";
-
-    const url = new URL("https://api.vercel.com/v13/deployments");
-    if (VERCEL_TEAM_ID) url.searchParams.set("teamId", VERCEL_TEAM_ID);
-
-    const filesPayload = files.map((f) => ({
+    const filesForVercel = files.map((f) => ({
       file: f.name,
-      data: f.content,
+      data: f.content, // sudah base64 dari frontend
       encoding: "base64",
     }));
 
+    const url = "https://api.vercel.com/v13/deployments";
+
     const payload = {
-      name: safeProjectName,
-      files: filesPayload,
+      name: projectName,
+      files: filesForVercel,
       projectSettings: {
         framework: null,
+        outputDirectory: null,
       },
     };
 
-    const vercelRes = await fetch(url.toString(), {
+    const apiRes = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${VERCEL_TOKEN}`,
@@ -85,46 +89,61 @@ module.exports = async (req, res) => {
       body: JSON.stringify(payload),
     });
 
-    const data = await vercelRes.json();
+    const apiJsonText = await apiRes.text();
+    let apiJson;
 
-    if (!vercelRes.ok) {
-      console.error("Vercel error:", data);
-      res.statusCode = 500;
-      return res.json({
-        error: "Vercel API error",
-        details: data,
+    try {
+      apiJson = JSON.parse(apiJsonText);
+    } catch (e) {
+      // kalau Vercel balas HTML/error aneh
+      return res.status(apiRes.status || 500).json({
+        success: false,
+        error: "Response dari Vercel bukan JSON.",
+        details: apiJsonText.slice(0, 400),
       });
     }
 
-    const deployedUrl = data?.url ? `https://${data.url}` : null;
-
-    // === SIMPAN HISTORY KE VERCEL KV ===
-    try {
-      const historyItem = {
-        projectName: safeProjectName,
-        url: deployedUrl,
-        time: Date.now(),
-        fileCount: files.length,
-      };
-      await kv.lpush("deploy-history", JSON.stringify(historyItem));
-      await kv.ltrim("deploy-history", 0, 49); // simpan 50 terakhir
-    } catch (e) {
-      console.error("Error saving history to KV:", e);
-      // jangan matiin response walau history gagal
+    if (!apiRes.ok) {
+      return res.status(apiRes.status).json({
+        success: false,
+        error:
+          (apiJson.error && apiJson.error.message) ||
+          apiJson.error ||
+          "Failed to deploy to Vercel",
+        details: apiJson,
+      });
     }
 
-    res.statusCode = 200;
-    return res.json({
+    const deploymentUrl = apiJson.url
+      ? apiJson.url.startsWith("http")
+        ? apiJson.url
+        : `https://${apiJson.url}`
+      : null;
+
+    // simpan history (best-effort)
+    try {
+      const historyItem = {
+        projectName,
+        url: deploymentUrl,
+        fileCount: files.length,
+        time: Date.now(),
+      };
+      await redis.lpush("deploy_history", JSON.stringify(historyItem));
+      await redis.ltrim("deploy_history", 0, 49); // simpan max 50
+    } catch (e) {
+      console.error("Failed to write deploy history:", e);
+    }
+
+    return res.status(200).json({
       success: true,
-      url: deployedUrl,
-      deploymentId: data?.id || null,
-      raw: data,
+      url: deploymentUrl,
+      deployment: apiJson,
     });
   } catch (err) {
-    console.error("Internal error:", err);
-    res.statusCode = 500;
-    return res.json({
-      error: "Internal error",
+    console.error("Deploy API error:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Unexpected error in deploy endpoint",
       details: err.message || String(err),
     });
   }
