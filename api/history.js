@@ -1,10 +1,33 @@
 // api/deploy.js
 const { Redis } = require("@upstash/redis");
 
+// Init Redis pakai env Upstash
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
+
+// Helper: baca body JSON sendiri (jangan percaya req.body)
+async function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+
+    req.on("end", () => {
+      try {
+        const json = data ? JSON.parse(data) : {};
+        resolve(json);
+      } catch (e) {
+        reject(e);
+      }
+    });
+
+    req.on("error", reject);
+  });
+}
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -15,8 +38,11 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { projectName, files } = req.body || {};
+    // ⬇️ baca body beneran dari request
+    const body = await readJsonBody(req);
+    const { projectName, files } = body || {};
 
+    // Validasi basic
     if (!projectName || !Array.isArray(files) || files.length === 0) {
       return res.status(400).json({
         success: false,
@@ -24,6 +50,7 @@ module.exports = async (req, res) => {
       });
     }
 
+    // Wajib ada index.html
     const hasIndex = files.some(
       (f) => f.name && f.name.toLowerCase() === "index.html"
     );
@@ -56,8 +83,7 @@ module.exports = async (req, res) => {
       url.searchParams.set("teamId", VERCEL_TEAM_ID);
     }
 
-    // Body request ke Vercel
-    const body = {
+    const deployBody = {
       name: projectName,
       files: filesForVercel,
       projectSettings: {
@@ -73,17 +99,19 @@ module.exports = async (req, res) => {
         Authorization: `Bearer ${VERCEL_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(deployBody),
     });
 
-    const apiJson = await apiRes.json();
+    const apiJson = await apiRes.json().catch(() => ({}));
 
     if (!apiRes.ok) {
       return res.status(apiRes.status).json({
         success: false,
         error:
-          (apiJson && apiJson.error && apiJson.error.message) ||
-          apiJson.error ||
+          (apiJson &&
+            apiJson.error &&
+            (apiJson.error.message || apiJson.error.code)) ||
+          apiJson.message ||
           "Failed to deploy to Vercel",
         details: apiJson,
       });
@@ -96,7 +124,7 @@ module.exports = async (req, res) => {
         : `https://${apiJson.url}`
       : null;
 
-    // Simpan ke history di Redis (best-effort, kalau error jangan matiin deploy)
+    // Simpan ke history di Redis (best-effort)
     try {
       const historyItem = {
         projectName,
@@ -105,7 +133,6 @@ module.exports = async (req, res) => {
         time: Date.now(),
       };
 
-      // lpush = prepend; simpan max 50 item
       await redis.lpush("deploy_history", JSON.stringify(historyItem));
       await redis.ltrim("deploy_history", 0, 49);
     } catch (err) {
