@@ -1,5 +1,5 @@
 // api/deploy.js
-const { Redis } = require("@upstash/redis/nodejs");
+const { Redis } = require("@upstash/redis");
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
