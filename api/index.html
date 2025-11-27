@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Deployer Pro by Robin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #05070b;
+      --bg-card: #0b1019;
+      --bg-card-soft: #0f1622;
+      --accent: #36c3ff;
+      --accent-soft: rgba(54, 195, 255, 0.16);
+      --danger: #ff4b5c;
+      --text: #f7f7ff;
+      --text-soft: #a4b0c4;
+      --radius-xl: 26px;
+      --radius-lg: 18px;
+      --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.65);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, #101726 0, transparent 55%),
+        radial-gradient(circle at bottom, #05070b 0, #020308 75%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 12px;
+    }
+
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(
+          rgba(255, 255, 255, 0.03) 1px,
+          transparent 1px
+        ),
+        linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.03) 1px,
+          transparent 1px
+        );
+      background-size: 40px 40px;
+      opacity: 0.75;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .shell {
+      width: 100%;
+      max-width: 960px;
+    }
+
+    .card {
+      background: linear-gradient(145deg, #05070b 0, #101623 55%, #05070b 100%);
+      border-radius: 32px;
+      padding: 28px 20px 22px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(255, 255, 255, 0.02);
+      backdrop-filter: blur(18px);
+    }
+
+    @media (min-width: 768px) {
+      .card { padding: 32px 32px 26px; }
+    }
+
+    /* HAMBURGER */
+    .menu-btn {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 30;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(5, 7, 11, 0.9);
+      color: var(--text-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+    }
+
+    .menu-panel {
+      position: fixed;
+      top: 58px;
+      left: 16px;
+      z-index: 29;
+      min-width: 180px;
+      background: rgba(5, 7, 11, 0.97);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      display: none;
+    }
+
+    .menu-panel.open { display: block; }
+
+    .menu-panel button {
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      color: var(--text-soft);
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .menu-panel button:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+    }
+
+    /* SIDE PANEL (Tutorial / History) */
+    .side-panel-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 25;
+      display: none;
+    }
+
+    .side-panel-backdrop.open { display: block; }
+
+    .side-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 320px;
+      max-width: 100%;
+      height: 100%;
+      background: rgba(5, 7, 11, 0.98);
+      border-left: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: -20px 0 40px rgba(0, 0, 0, 0.8);
+      padding: 16px 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transform: translateX(100%);
+      transition: transform 0.18s ease-out;
+      z-index: 26;
+    }
+
+    .side-panel.open { transform: translateX(0); }
+
+    .side-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .side-title {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-soft);
+    }
+
+    .side-close {
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: transparent;
+      color: var(--text-soft);
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .side-content {
+      flex: 1;
+      overflow-y: auto;
+      padding-top: 6px;
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .side-content h3 {
+      font-size: 13px;
+      margin: 10px 0 4px;
+      color: var(--text);
+    }
+
+    .side-content ol, .side-content ul {
+      padding-left: 16px;
+      margin-bottom: 10px;
+    }
+
+    .side-content li { margin-bottom: 4px; }
+
+    .history-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .history-item {
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 23, 42, 0.92);
+      font-size: 12px;
+    }
+
+    .history-item .h-name { color: var(--text); }
+    .history-item .h-url {
+      color: var(--accent);
+      word-break: break-all;
+      font-size: 11px;
+    }
+    .history-item .h-time { font-size: 11px; opacity: 0.7; }
+
+    .history-empty {
+      font-size: 12px;
+      margin-top: 8px;
+      opacity: 0.8;
+    }
+
+    /* tombol history actions */
+    .history-actions {
+      margin-top: 6px;
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .btn-open,
+    .btn-copy {
+      border-radius: 999px;
+      border: 1px solid rgba(54, 195, 255, 0.7);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--accent);
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .btn-open:active,
+    .btn-copy:active {
+      transform: translateY(1px) scale(0.98);
+    }
+
+    .badge-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      gap: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(54, 195, 255, 0.8);
+    }
+
+    .title-block h1 {
+      font-size: 26px;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .title-block p {
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .form-grid {
+      margin-top: 22px;
+      display: grid;
+      gap: 18px;
+    }
+
+    @media (min-width: 768px) {
+      .form-grid {
+        grid-template-columns: minmax(0, 2fr);
+      }
+    }
+
+    .field-label {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-soft);
+      margin-bottom: 8px;
+    }
+
+    .input-shell {
+      background: radial-gradient(
+          circle at top left,
+          rgba(54, 195, 255, 0.08),
+          transparent 55%
+        ),
+        radial-gradient(
+          circle at bottom right,
+          rgba(0, 0, 0, 0.75),
+          #05070b 75%
+        );
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .input-shell span {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-soft);
+    }
+
+    .input-shell input[type="text"] {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .input-shell input[type="text"]::placeholder {
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    .file-shell {
+      background: linear-gradient(145deg, #05070b, #101623);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .file-info {
+      font-size: 13px;
+      color: var(--text-soft);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn {
+      position: relative;
+      border: none;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: var(--accent);
+      color: #020308;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      outline: none;
+      transition: transform 0.12s ease-out, box-shadow 0.12s ease-out,
+        background 0.12s ease-out, opacity 0.12s ease-out;
+      box-shadow: 0 0 0 1px rgba(54, 195, 255, 0.85),
+        0 12px 26px rgba(0, 0, 0, 0.7),
+        0 0 22px rgba(54, 195, 255, 0.8);
+    }
+
+    .btn:active {
+      transform: translateY(1px) scale(0.99);
+      box-shadow: 0 0 0 1px rgba(54, 195, 255, 0.7),
+        0 8px 18px rgba(0, 0, 0, 0.7);
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 11px;
+      padding: 7px 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      box-shadow: none;
+    }
+
+    .btn-ghost:active {
+      transform: translateY(1px) scale(0.99);
+    }
+
+    .btn-main {
+      margin-top: 18px;
+      width: 100%;
+      height: 46px;
+      font-size: 13px;
+      border-radius: 999px;
+      background: radial-gradient(
+          circle at top,
+          rgba(54, 195, 255, 0.9),
+          rgba(54, 195, 255, 0.7)
+        ),
+        linear-gradient(145deg, #29a1ff, #5cd2ff);
+    }
+
+    .btn-main.disabled {
+      opacity: 0.5;
+      cursor: default;
+      box-shadow: 0 0 0 1px rgba(54, 195, 255, 0.2),
+        0 8px 18px rgba(0, 0, 0, 0.7);
+    }
+
+    .console {
+      margin-top: 22px;
+      background: radial-gradient(
+          circle at top left,
+          rgba(54, 195, 255, 0.12),
+          transparent 60%
+        ),
+        radial-gradient(
+          circle at bottom right,
+          rgba(0, 0, 0, 0.9),
+          #05070b 72%
+        );
+      border-radius: var(--radius-xl);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+        Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      color: var(--text-soft);
+      max-height: 240px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+    }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .console-dots {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .dot.red { background: #ff5f57; }
+    .dot.yellow { background: #febc2e; }
+    .dot.green { background: #28c840; }
+
+    .console-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-soft);
+    }
+
+    .console-body {
+      margin-top: 4px;
+      padding-right: 6px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    }
+
+    .console-line {
+      white-space: pre-wrap;
+      margin-bottom: 4px;
+    }
+
+    .console-line span.prefix { color: #6c768a; }
+    .console-line span.time { color: rgba(164, 176, 196, 0.8); }
+    .console-line.success { color: #6dffb3; }
+    .console-line.error { color: var(--danger); }
+
+    .docs {
+      margin-top: 22px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 14px;
+      display: grid;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .footer {
+      margin-top: 16px;
+      font-size: 10px;
+      text-align: center;
+      color: #5f6c83;
+    }
+
+    .footer span.highlight { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+
+  <!-- HAMBURGER -->
+  <button class="menu-btn" id="menuBtn">☰</button>
+  <div class="menu-panel" id="menuPanel">
+    <button id="menuTutorial">📘 Tutorial Deploy</button>
+    <button id="menuHistory">🕒 History Deploy</button>
+  </div>
+
+  <!-- SIDE PANEL (Tutorial / History) -->
+  <div class="side-panel-backdrop" id="sideBackdrop"></div>
+  <div class="side-panel" id="sidePanel">
+    <div class="side-header">
+      <div class="side-title" id="sideTitle">PANEL</div>
+      <button class="side-close" id="sideClose">✕</button>
+    </div>
+    <div class="side-content" id="sideContent">
+      <!-- diisi via JS -->
+    </div>
+  </div>
+
+  <div class="shell">
+    <div class="card">
+      <div class="badge-row">
+        <div class="badge">
+          <span class="badge-dot"></span>
+          <span>Robin Deployer · v1</span>
+        </div>
+        <button class="btn-ghost" id="btnClearLog" type="button">
+          Clear Log
+        </button>
+      </div>
+
+      <div class="title-block">
+        <h1>Deployer Pro</h1>
+        <p>ENGINEERED BY ROBIN.</p>
+      </div>
+
+      <div class="form-grid">
+        <div>
+          <div class="field-label">Project Identity</div>
+          <div class="input-shell">
+            <span>#</span>
+            <input
+              type="text"
+              id="projectName"
+              placeholder="project-myapp-v1"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">Select Files (multi-select)</div>
+          <div class="file-shell">
+            <div class="file-info" id="fileInfo">Belum ada file dipilih.</div>
+            <label class="btn-ghost" style="cursor:pointer;">
+              Pilih File
+              <input
+                type="file"
+                id="fileInput"
+                multiple
+                style="display:none;"
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-main" id="deployBtn" type="button">
+        INITIALIZE DEPLOYMENT
+      </button>
+
+      <div class="console">
+        <div class="console-header">
+          <div class="console-dots">
+            <div class="dot red"></div>
+            <div class="dot yellow"></div>
+            <div class="dot green"></div>
+          </div>
+          <div class="console-title">system log</div>
+        </div>
+        <div class="console-body" id="consoleBody">
+          <div class="console-line">
+            <span class="prefix">$</span> System ready...
+          </div>
+          <div class="console-line">
+            <span class="prefix">$</span> Waiting for files...
+          </div>
+        </div>
+      </div>
+
+      <div class="docs">
+        <span style="font-size:11px; opacity:0.8;">
+          Hint: buka menu ☰ di kiri atas untuk lihat tutorial & history deploy.
+        </span>
+      </div>
+
+      <div class="footer">
+        Deployer UI · <span class="highlight">powered by Vercel API + KV</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const fileInfo = document.getElementById("fileInfo");
+    const consoleBody = document.getElementById("consoleBody");
+    const projectNameInput = document.getElementById("projectName");
+    const deployBtn = document.getElementById("deployBtn");
+    const btnClearLog = document.getElementById("btnClearLog");
+
+    const menuBtn = document.getElementById("menuBtn");
+    const menuPanel = document.getElementById("menuPanel");
+    const menuTutorial = document.getElementById("menuTutorial");
+    const menuHistory = document.getElementById("menuHistory");
+    const sideBackdrop = document.getElementById("sideBackdrop");
+    const sidePanel = document.getElementById("sidePanel");
+    const sideTitle = document.getElementById("sideTitle");
+    const sideContent = document.getElementById("sideContent");
+    const sideClose = document.getElementById("sideClose");
+
+    function formatTime(date) {
+      return date.toTimeString().split(" ")[0];
+    }
+
+    function appendLog(message, type = "info") {
+      const line = document.createElement("div");
+      line.classList.add("console-line");
+      if (type === "success") line.classList.add("success");
+      if (type === "error") line.classList.add("error");
+
+      const timeSpan = document.createElement("span");
+      timeSpan.classList.add("time");
+      timeSpan.textContent = "[" + formatTime(new Date()) + "] ";
+
+      const prefixSpan = document.createElement("span");
+      prefixSpan.classList.add("prefix");
+      prefixSpan.textContent = "$ ";
+
+      const textNode = document.createTextNode(message);
+
+      line.appendChild(timeSpan);
+      line.appendChild(prefixSpan);
+      line.appendChild(textNode);
+      consoleBody.appendChild(line);
+      consoleBody.scrollTop = consoleBody.scrollHeight;
+    }
+
+    // File info
+    fileInput.addEventListener("change", () => {
+      const files = Array.from(fileInput.files || []);
+      if (!files.length) {
+        fileInfo.textContent = "Belum ada file dipilih.";
+        return;
+      }
+      if (files.length === 1) {
+        fileInfo.textContent = files[0].name;
+      } else {
+        const names = files.map((f) => f.name);
+        fileInfo.textContent = `${files.length} file dipilih · ${names
+          .slice(0, 3)
+          .join(", ")}${names.length > 3 ? ", ..." : ""}`;
+      }
+    });
+
+    // Clear log
+    btnClearLog.addEventListener("click", () => {
+      consoleBody.innerHTML = "";
+      const baseLines = [
+        "$ System ready...",
+        "$ Waiting for files..."
+      ];
+      baseLines.forEach((text) => {
+        const line = document.createElement("div");
+        line.classList.add("console-line");
+        const prefixSpan = document.createElement("span");
+        prefixSpan.classList.add("prefix");
+        prefixSpan.textContent = "$ ";
+        line.appendChild(prefixSpan);
+        line.appendChild(document.createTextNode(text.replace("$ ", "")));
+        consoleBody.appendChild(line);
+      });
+      consoleBody.scrollTop = 0;
+    });
+
+    // HAMBURGER
+    menuBtn.addEventListener("click", () => {
+      menuPanel.classList.toggle("open");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (
+        !menuPanel.contains(e.target) &&
+        e.target !== menuBtn
+      ) {
+        menuPanel.classList.remove("open");
+      }
+    });
+
+    function openSidePanel(title, htmlContent) {
+      sideTitle.textContent = title;
+      sideContent.innerHTML = htmlContent;
+      sideBackdrop.classList.add("open");
+      sidePanel.classList.add("open");
+    }
+
+    function closeSidePanel() {
+      sideBackdrop.classList.remove("open");
+      sidePanel.classList.remove("open");
+    }
+
+    sideBackdrop.addEventListener("click", closeSidePanel);
+    sideClose.addEventListener("click", closeSidePanel);
+
+    // Tutorial content
+    menuTutorial.addEventListener("click", () => {
+      menuPanel.classList.remove("open");
+      const html = `
+        <h3>Cara Deploy via Deployer Pro by Robin</h3>
+        <ol>
+          <li>Siapkan project web statis kamu (HTML, CSS, JS, gambar, dll).</li>
+          <li>Pastikan ada file <code>index.html</code> di root project.</li>
+          <li>Buka halaman ini, klik tombol <strong>Pilih File</strong> dan pilih semua file project (boleh multi-select).</li>
+          <li>Isi <strong>Project Identity</strong> untuk nama project / URL (misal: <code>portfolio-robin</code>).</li>
+          <li>Tekan tombol <strong>INITIALIZE DEPLOYMENT</strong>.</li>
+          <li>Tunggu log di console, jika berhasil akan muncul URL seperti:
+            <br><code>https://portfolio-robin-123.vercel.app</code>
+          </li>
+        </ol>
+        <h3>Catatan</h3>
+        <ul>
+          <li>Deploy ini berjalan di akun Vercel pemilik website (Robin).</li>
+          <li>Minimal wajib ada file <code>index.html</code>, kalau tidak deploy akan ditolak.</li>
+          <li>Jika muncul error limit / token / lainnya, pesan detail akan tampil di console.</li>
+        </ul>
+      `;
+      openSidePanel("TUTORIAL DEPLOY", html);
+    });
+
+    // History content (via /api/history)
+    menuHistory.addEventListener("click", async () => {
+      menuPanel.classList.remove("open");
+      openSidePanel("HISTORY DEPLOY", "<p>Loading history...</p>");
+      try {
+        const res = await fetch("/api/history");
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          sideContent.innerHTML =
+            "<p>Gagal memuat history.</p><p style='font-size:12px;opacity:0.8;'>"
+            + (data.error || "Unknown error") + "</p>";
+          return;
+        }
+        const items = data.items || [];
+        if (!items.length) {
+          sideContent.innerHTML =
+            "<p class='history-empty'>Belum ada history deploy yang tersimpan.</p>";
+          return;
+        }
+        let html = "<div class='history-list'>";
+        items.forEach((item) => {
+          const t = new Date(item.time || item.timestamp || Date.now());
+          const timeStr = t.toLocaleString("id-ID");
+          const url = item.url || "-";
+          html += `
+            <div class="history-item">
+              <div class="h-name">${item.projectName || "(tanpa nama)"}</div>
+              <div class="h-url">${url}</div>
+              <div class="h-time">${timeStr} · ${item.fileCount || 0} file(s)</div>
+              <div class="history-actions">
+                <button class="btn-open" data-url="${url}">Open result</button>
+                <button class="btn-copy" data-url="${url}">Copy URL</button>
+              </div>
+            </div>
+          `;
+        });
+        html += "</div>";
+        sideContent.innerHTML = html;
+      } catch (err) {
+        sideContent.innerHTML =
+          "<p>Gagal memuat history.</p><p style='font-size:12px;opacity:0.8;'>"
+          + err.message + "</p>";
+      }
+    });
+
+    // Klik tombol Open result & Copy URL di panel history
+    sideContent.addEventListener("click", (e) => {
+      const target = e.target;
+      if (target.classList.contains("btn-open")) {
+        const url = target.getAttribute("data-url");
+        if (url && url !== "-" && url.startsWith("http")) {
+          window.open(url, "_blank", "noopener,noreferrer");
+        } else {
+          alert("URL tidak tersedia untuk item ini.");
+        }
+      }
+
+      if (target.classList.contains("btn-copy")) {
+        const url = target.getAttribute("data-url");
+        if (!url || url === "-") {
+          alert("URL tidak tersedia untuk item ini.");
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url)
+            .then(() => {
+              alert("URL copied to clipboard.");
+            })
+            .catch(() => {
+              alert("Gagal menyalin URL.");
+            });
+        } else {
+          // fallback jadul
+          const dummy = document.createElement("input");
+          dummy.value = url;
+          document.body.appendChild(dummy);
+          dummy.select();
+          try {
+            document.execCommand("copy");
+            alert("URL copied to clipboard.");
+          } catch {
+            alert("Gagal menyalin URL.");
+          }
+          document.body.removeChild(dummy);
+        }
+      }
+    });
+
+    // DEPLOY
+    deployBtn.addEventListener("click", async () => {
+      if (deployBtn.classList.contains("disabled")) return;
+
+      const projectName = projectNameInput.value.trim() || "untitled-project";
+      const files = Array.from(fileInput.files || []);
+
+      if (!files.length) {
+        appendLog("Deployment aborted: belum ada file yang dipilih.", "error");
+        return;
+      }
+
+      const hasIndex = files.some(
+        (f) => f.name.toLowerCase() === "index.html"
+      );
+      if (!hasIndex) {
+        appendLog(
+          "Deployment aborted: file index.html tidak ditemukan.",
+          "error"
+        );
+        return;
+      }
+
+      async function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            const base64 = String(result).split(",")[1] || "";
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      try {
+        deployBtn.classList.add("disabled");
+        deployBtn.textContent = "DEPLOYING TO VERCEL...";
+
+        appendLog(`Initializing deployment for project '${projectName}'...`);
+        appendLog(`Reading ${files.length} file(s) from browser...`);
+
+        const filesPayload = [];
+        for (const f of files) {
+          const base64 = await fileToBase64(f);
+          filesPayload.push({
+            name: f.name,
+            content: base64,
+          });
+        }
+
+        appendLog("Sending payload to /api/deploy ...");
+
+        const response = await fetch("/api/deploy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            projectName,
+            files: filesPayload,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          appendLog(
+            `Deployment failed: ${result.error || "Unknown error"}`,
+            "error"
+          );
+          if (result.details) {
+            appendLog(
+              `Details: ${JSON.stringify(result.details).slice(0, 400)}...`,
+              "error"
+            );
+          }
+        } else {
+          const previewUrl = result.url || "(no URL)";
+          appendLog(
+            `✔ Deployment completed. Preview: ${previewUrl}`,
+            "success"
+          );
+        }
+      } catch (err) {
+        appendLog(`Deployment crashed: ${err.message}`, "error");
+      } finally {
+        deployBtn.classList.remove("disabled");
+        deployBtn.textContent = "INITIALIZE DEPLOYMENT";
+      }
+    });
+  </script>
+</body>
+  </html>
